@@ -393,8 +393,14 @@
                     return;
                 }
 
+                // Fetch game summary for detailed stats
+                const gameId = leafsGame.id;
+                const summaryUrl = `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=${gameId}`;
+                const summaryResponse = await fetch(summaryUrl);
+                const summaryData = summaryResponse.ok ? await summaryResponse.json() : null;
+                
                 // Display the game report
-                await displayGameReport(content, leafsGame);
+                await displayGameReport(content, leafsGame, summaryData);
 
             } catch (error) {
                 console.error('Error:', error);
@@ -458,7 +464,7 @@
             }
         }
 
-        async function displayGameReport(content, gameData) {
+        async function displayGameReport(content, gameData, summaryData) {
             const competition = gameData.competitions?.[0];
             const competitors = competition?.competitors || [];
             
@@ -511,30 +517,63 @@
                 </div>
             `;
 
-            // Get Leafs scorers (if available in linescores)
-            const linescores = leafsTeam.linescores || [];
-            if (linescores.length > 0) {
-                html += `
-                    <div class="scorers-section">
-                        <div class="section-title">📊 Period Breakdown</div>
-                `;
+            // Get Leafs goal scorers from summary data
+            if (summaryData?.scoringPlays) {
+                const leafsGoals = summaryData.scoringPlays.filter(play => 
+                    play.team?.abbreviation === 'TOR'
+                );
                 
-                linescores.forEach((period, index) => {
-                    if (period.value > 0) {
-                        const periodName = index === 0 ? '1st Period' : 
-                                         index === 1 ? '2nd Period' : 
-                                         index === 2 ? '3rd Period' : 'Overtime';
+                if (leafsGoals.length > 0) {
+                    html += `
+                        <div class="scorers-section">
+                            <div class="section-title">⚡ Leafs Goal Scorers</div>
+                    `;
+                    
+                    leafsGoals.forEach((goal, index) => {
+                        const scorer = goal.text || 'Unknown';
+                        const period = goal.period?.displayValue || '';
+                        const clock = goal.clock?.displayValue || '';
+                        
                         html += `
                             <div class="scorer">
                                 <div class="scorer-info">
-                                    <div class="goal-number">${period.value}</div>
-                                    <div class="scorer-name">${periodName}</div>
+                                    <div class="goal-number">${index + 1}</div>
+                                    <div class="scorer-name">${scorer}</div>
+                                </div>
+                                <div class="goal-details">
+                                    ${period}<br>${clock}
                                 </div>
                             </div>
                         `;
-                    }
-                });
-                html += `</div>`;
+                    });
+                    html += `</div>`;
+                }
+            } else {
+                // Fallback to period breakdown if no scoring plays
+                const linescores = leafsTeam.linescores || [];
+                if (linescores.length > 0) {
+                    html += `
+                        <div class="scorers-section">
+                            <div class="section-title">📊 Period Breakdown</div>
+                    `;
+                    
+                    linescores.forEach((period, index) => {
+                        if (period.value > 0) {
+                            const periodName = index === 0 ? '1st Period' : 
+                                             index === 1 ? '2nd Period' : 
+                                             index === 2 ? '3rd Period' : 'Overtime';
+                            html += `
+                                <div class="scorer">
+                                    <div class="scorer-info">
+                                        <div class="goal-number">${period.value}</div>
+                                        <div class="scorer-name">${periodName}</div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    });
+                    html += `</div>`;
+                }
             }
 
             // Fetch and display standings
