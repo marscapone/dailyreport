@@ -340,26 +340,12 @@
     </div>
 
     <script>
-        const LEAFS_TEAM_ID = 10;
-        const LEAFS_ABBREV = 'TOR';
-        
-        // CORS proxy - helps bypass browser restrictions
-        const CORS_PROXY = 'https://corsproxy.io/?';
-        
         // Set today's date
         const today = new Date();
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         document.getElementById('today-date').textContent = today.toLocaleDateString('en-US', options);
 
         let isLoading = false;
-
-        async function fetchWithProxy(url) {
-            const response = await fetch(CORS_PROXY + encodeURIComponent(url));
-            if (!response.ok) {
-                throw new Error(`API returned status ${response.status}`);
-            }
-            return response.json();
-        }
 
         async function loadReport() {
             if (isLoading) return;
@@ -375,35 +361,40 @@
                 // Calculate yesterday's date
                 const yesterday = new Date();
                 yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStr = yesterday.toISOString().split('T')[0];
+                const yesterdayStr = formatDate(yesterday);
                 
-                // Fetch schedule for the week
-                const scheduleUrl = `https://api-web.nhle.com/v1/club-schedule/${LEAFS_ABBREV}/week/${yesterdayStr}`;
-                const scheduleData = await fetchWithProxy(scheduleUrl);
+                // Fetch NHL scoreboard from ESPN for yesterday
+                const scoreboardUrl = `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${yesterdayStr}`;
+                const scoreboardResponse = await fetch(scoreboardUrl);
                 
-                // Find yesterday's game
-                let yesterdayGame = null;
-                for (const game of scheduleData.games || []) {
-                    const gameDate = new Date(game.gameDate).toISOString().split('T')[0];
-                    
-                    if (gameDate === yesterdayStr && game.gameState === 'OFF') {
-                        yesterdayGame = game;
-                        break;
-                    }
+                if (!scoreboardResponse.ok) {
+                    throw new Error(`ESPN API returned status ${scoreboardResponse.status}`);
                 }
 
-                if (!yesterdayGame) {
+                const scoreboardData = await scoreboardResponse.json();
+                
+                // Find the Leafs game
+                const leafsGame = scoreboardData.events?.find(event => {
+                    const teams = event.competitions?.[0]?.competitors || [];
+                    return teams.some(team => 
+                        team.team?.abbreviation === 'TOR' ||
+                        team.team?.displayName?.includes('Maple Leafs')
+                    );
+                });
+
+                if (!leafsGame) {
                     await displayNoGame(content);
                     return;
                 }
 
-                // Fetch detailed game data
-                const gameId = yesterdayGame.id;
-                const boxscoreUrl = `https://api-web.nhle.com/v1/gamecenter/${gameId}/boxscore`;
-                const boxscoreData = await fetchWithProxy(boxscoreUrl);
-                
-                // Display the report
-                await displayGameReport(content, yesterdayGame, boxscoreData);
+                // Check if game is complete
+                if (leafsGame.status?.type?.state !== 'post') {
+                    await displayNoGame(content);
+                    return;
+                }
+
+                // Display the game report
+                await displayGameReport(content, leafsGame);
 
             } catch (error) {
                 console.error('Error:', error);
@@ -412,7 +403,7 @@
                     <div class="error">
                         <strong>⚠️ Unable to fetch Leafs data</strong><br><br>
                         ${error.message}<br><br>
-                        The proxy service might be down. Please try refreshing in a moment.
+                        Please try refreshing in a moment.
                     </div>
                 `;
             } finally {
@@ -421,14 +412,27 @@
             }
         }
 
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}${month}${day}`;
+        }
+
         async function displayNoGame(content) {
             try {
-                const standingsUrl = 'https://api-web.nhle.com/v1/standings/now';
-                const standingsData = await fetchWithProxy(standingsUrl);
+                // Fetch standings
+                const standingsUrl = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/standings';
+                const standingsResponse = await fetch(standingsUrl);
+                const standingsData = await standingsResponse.json();
                 
+                // Find Leafs in standings
                 let leafsStanding = null;
-                for (const team of standingsData.standings || []) {
-                    if (team.teamAbbrev?.default === LEAFS_ABBREV) {
+                for (const division of standingsData.children || []) {
+                    const team = division.standings?.entries?.find(entry => 
+                        entry.team?.abbreviation === 'TOR'
+                    );
+                    if (team) {
                         leafsStanding = team;
                         break;
                     }
@@ -443,31 +447,41 @@
                     ${leafsStanding ? getStandingsHTML(leafsStanding) : ''}
                 `;
             } catch (e) {
+                console.error('Error loading standings:', e);
                 content.innerHTML = `
                     <div class="no-game">
                         <div style="font-size: 3rem; margin-bottom: 1rem;">🏒</div>
                         <div style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">No Game Yesterday</div>
-                        <div>The Leafs had the night off. Check back after their next game!</div>
+                        <div>The Leafs had the night off.</div>
                     </div>
                 `;
             }
         }
 
-        async function displayGameReport(content, gameInfo, boxscore) {
-            const isHomeGame = gameInfo.homeTeam.abbrev === LEAFS_ABBREV;
-            const leafsTeam = isHomeGame ? gameInfo.homeTeam : gameInfo.awayTeam;
-            const opponentTeam = isHomeGame ? gameInfo.awayTeam : gameInfo.homeTeam;
+        async function displayGameReport(content, gameData) {
+            const competition = gameData.competitions?.[0];
+            const competitors = competition?.competitors || [];
             
-            const leafsScore = leafsTeam.score;
-            const opponentScore = opponentTeam.score;
+            // Find Leafs and opponent
+            const leafsTeam = competitors.find(c => c.team?.abbreviation === 'TOR');
+            const opponentTeam = competitors.find(c => c.team?.abbreviation !== 'TOR');
+            
+            if (!leafsTeam || !opponentTeam) {
+                throw new Error('Could not find team data');
+            }
+
+            const leafsScore = parseInt(leafsTeam.score);
+            const opponentScore = parseInt(opponentTeam.score);
+            const isHomeGame = leafsTeam.homeAway === 'home';
             
             // Determine result
             let resultClass = 'win';
             let resultText = 'LEAFS WIN! 🎉';
             
             if (leafsScore < opponentScore) {
-                if (gameInfo.periodDescriptor?.periodType === 'OT' || 
-                    gameInfo.periodDescriptor?.periodType === 'SO') {
+                // Check if OT/SO
+                const periods = competition?.situation?.lastPlay?.period?.number || 3;
+                if (periods > 3) {
                     resultClass = 'ot-loss';
                     resultText = 'LEAFS LOSE IN OT/SO';
                 } else {
@@ -480,76 +494,61 @@
             let html = `
                 <div class="score-section">
                     <div class="game-result ${resultClass}">${resultText}</div>
-                    <div class="matchup">${isHomeGame ? 'vs' : '@'} ${opponentTeam.placeName.default} ${opponentTeam.commonName.default}</div>
+                    <div class="matchup">${isHomeGame ? 'vs' : '@'} ${opponentTeam.team.displayName}</div>
                     <div class="final-score">
-                        <img src="${leafsTeam.logo}" alt="Leafs" class="team-logo">
+                        <img src="${leafsTeam.team.logo}" alt="Leafs" class="team-logo">
                         <span>${leafsScore} - ${opponentScore}</span>
-                        <img src="${opponentTeam.logo}" alt="${opponentTeam.abbrev}" class="team-logo">
+                        <img src="${opponentTeam.team.logo}" alt="${opponentTeam.team.abbreviation}" class="team-logo">
                     </div>
                     <div class="game-info">
-                        ${new Date(gameInfo.gameDate).toLocaleDateString('en-US', { 
+                        ${new Date(gameData.date).toLocaleDateString('en-US', { 
                             weekday: 'long', 
                             year: 'numeric', 
                             month: 'long', 
                             day: 'numeric' 
                         })}
-                        ${gameInfo.periodDescriptor?.periodType === 'OT' ? ' • Overtime' : ''}
-                        ${gameInfo.periodDescriptor?.periodType === 'SO' ? ' • Shootout' : ''}
                     </div>
                 </div>
             `;
 
-            // Get Leafs goals
-            const leafsGoals = [];
-            const boxscoreTeam = isHomeGame ? boxscore.homeTeam : boxscore.awayTeam;
-            
-            if (boxscoreTeam?.goals && boxscoreTeam.goals.length > 0) {
-                for (const goal of boxscoreTeam.goals) {
-                    const period = goal.period;
-                    const periodLabel = period === 1 ? '1st' : period === 2 ? '2nd' : period === 3 ? '3rd' : 'OT';
-                    const time = goal.timeInPeriod || '';
-                    
-                    leafsGoals.push({
-                        scorer: goal.name?.default || 'Unknown',
-                        period: periodLabel,
-                        time: time,
-                        assists: goal.assists?.map(a => a.name?.default).filter(Boolean).join(', ') || ''
-                    });
-                }
-            }
-
-            // Display goal scorers
-            if (leafsGoals.length > 0) {
-                html += `<div class="scorers-section">
-                    <div class="section-title">⚡ Leafs Goal Scorers</div>`;
+            // Get Leafs scorers (if available in linescores)
+            const linescores = leafsTeam.linescores || [];
+            if (linescores.length > 0) {
+                html += `
+                    <div class="scorers-section">
+                        <div class="section-title">📊 Period Breakdown</div>
+                `;
                 
-                leafsGoals.forEach((goal, index) => {
-                    html += `
-                        <div class="scorer">
-                            <div class="scorer-info">
-                                <div class="goal-number">${index + 1}</div>
-                                <div>
-                                    <div class="scorer-name">${goal.scorer}</div>
-                                    ${goal.assists ? `<div class="assist-details">Assists: ${goal.assists}</div>` : ''}
+                linescores.forEach((period, index) => {
+                    if (period.value > 0) {
+                        const periodName = index === 0 ? '1st Period' : 
+                                         index === 1 ? '2nd Period' : 
+                                         index === 2 ? '3rd Period' : 'Overtime';
+                        html += `
+                            <div class="scorer">
+                                <div class="scorer-info">
+                                    <div class="goal-number">${period.value}</div>
+                                    <div class="scorer-name">${periodName}</div>
                                 </div>
                             </div>
-                            <div class="goal-details">
-                                ${goal.period} period<br>${goal.time}
-                            </div>
-                        </div>
-                    `;
+                        `;
+                    }
                 });
                 html += `</div>`;
             }
 
             // Fetch and display standings
             try {
-                const standingsUrl = 'https://api-web.nhle.com/v1/standings/now';
-                const standingsData = await fetchWithProxy(standingsUrl);
+                const standingsUrl = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/standings';
+                const standingsResponse = await fetch(standingsUrl);
+                const standingsData = await standingsResponse.json();
                 
                 let leafsStanding = null;
-                for (const team of standingsData.standings || []) {
-                    if (team.teamAbbrev?.default === LEAFS_ABBREV) {
+                for (const division of standingsData.children || []) {
+                    const team = division.standings?.entries?.find(entry => 
+                        entry.team?.abbreviation === 'TOR'
+                    );
+                    if (team) {
                         leafsStanding = team;
                         break;
                     }
@@ -566,14 +565,11 @@
         }
 
         function getStandingsHTML(standing) {
-            const wins = standing.wins || 0;
-            const losses = standing.losses || 0;
-            const otLosses = standing.otLosses || 0;
-            const points = standing.points || 0;
-            const gamesPlayed = standing.gamesPlayed || 0;
-            const divisionName = standing.divisionName || 'Division';
-            const conferenceRank = standing.conferenceSequence || '?';
-            const leagueRank = standing.leagueSequence || '?';
+            const stats = standing.stats || [];
+            const record = stats.find(s => s.name === 'overall')?.displayValue || '';
+            const points = stats.find(s => s.name === 'points')?.value || 0;
+            const gamesPlayed = stats.find(s => s.name === 'gamesPlayed')?.value || 0;
+            const rank = stats.find(s => s.name === 'rank')?.value || '?';
             
             // Calculate approximate playoff odds based on points pace
             const pointsPerGame = gamesPlayed > 0 ? points / gamesPlayed : 0;
@@ -589,9 +585,9 @@
             return `
                 <div class="standings-section">
                     <div class="standings-header">CURRENT STANDINGS</div>
-                    <div class="record">${wins}-${losses}-${otLosses}</div>
+                    <div class="record">${record}</div>
                     <div class="standings-detail">${points} points (${gamesPlayed} GP)</div>
-                    <div class="standings-detail">${divisionName} • ${conferenceRank}th in East • ${leagueRank}th in NHL</div>
+                    <div class="standings-detail">${rank}th in ${standing.team?.name || 'Division'}</div>
                     <div class="standings-detail" style="font-size: 1.2rem; margin-top: 1rem; font-weight: 600;">
                         Playoff Odds: ${playoffOdds}
                     </div>
