@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <parameter name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leafs Daily Report</title>
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
     <style>
@@ -274,18 +274,6 @@
             line-height: 1.6;
         }
 
-        .debug {
-            background: #f0f0f0;
-            color: #333;
-            padding: 1rem;
-            border-radius: 6px;
-            margin: 1rem 0;
-            font-size: 0.9rem;
-            font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -354,7 +342,9 @@
     <script>
         const LEAFS_TEAM_ID = 10;
         const LEAFS_ABBREV = 'TOR';
-        const DEBUG = true; // Set to false to hide debug info
+        
+        // CORS proxy - helps bypass browser restrictions
+        const CORS_PROXY = 'https://corsproxy.io/?';
         
         // Set today's date
         const today = new Date();
@@ -362,11 +352,13 @@
         document.getElementById('today-date').textContent = today.toLocaleDateString('en-US', options);
 
         let isLoading = false;
-        let debugInfo = [];
 
-        function addDebug(message) {
-            console.log(message);
-            debugInfo.push(message);
+        async function fetchWithProxy(url) {
+            const response = await fetch(CORS_PROXY + encodeURIComponent(url));
+            if (!response.ok) {
+                throw new Error(`API returned status ${response.status}`);
+            }
+            return response.json();
         }
 
         async function loadReport() {
@@ -377,7 +369,6 @@
             
             isLoading = true;
             refreshBtn.disabled = true;
-            debugInfo = [];
             content.innerHTML = '<div class="loading"><div class="spinner"></div><div>Fetching Leafs data...</div></div>';
 
             try {
@@ -386,44 +377,22 @@
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yesterdayStr = yesterday.toISOString().split('T')[0];
                 
-                addDebug(`Today: ${today.toISOString().split('T')[0]}`);
-                addDebug(`Yesterday: ${yesterdayStr}`);
-                
-                // Fetch schedule for the week containing yesterday
+                // Fetch schedule for the week
                 const scheduleUrl = `https://api-web.nhle.com/v1/club-schedule/${LEAFS_ABBREV}/week/${yesterdayStr}`;
-                addDebug(`Fetching schedule: ${scheduleUrl}`);
-                
-                const scheduleResponse = await fetch(scheduleUrl, {
-                    mode: 'cors',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                addDebug(`Schedule response status: ${scheduleResponse.status}`);
-                
-                if (!scheduleResponse.ok) {
-                    throw new Error(`NHL API returned status ${scheduleResponse.status}`);
-                }
-
-                const scheduleData = await scheduleResponse.json();
-                addDebug(`Found ${scheduleData.games ? scheduleData.games.length : 0} games in week`);
+                const scheduleData = await fetchWithProxy(scheduleUrl);
                 
                 // Find yesterday's game
                 let yesterdayGame = null;
                 for (const game of scheduleData.games || []) {
                     const gameDate = new Date(game.gameDate).toISOString().split('T')[0];
-                    addDebug(`Game date: ${gameDate}, state: ${game.gameState}`);
                     
                     if (gameDate === yesterdayStr && game.gameState === 'OFF') {
                         yesterdayGame = game;
-                        addDebug(`Found yesterday's game: ID ${game.id}`);
                         break;
                     }
                 }
 
                 if (!yesterdayGame) {
-                    addDebug('No completed game found for yesterday');
                     await displayNoGame(content);
                     return;
                 }
@@ -431,41 +400,20 @@
                 // Fetch detailed game data
                 const gameId = yesterdayGame.id;
                 const boxscoreUrl = `https://api-web.nhle.com/v1/gamecenter/${gameId}/boxscore`;
-                addDebug(`Fetching boxscore: ${boxscoreUrl}`);
-                
-                const boxscoreResponse = await fetch(boxscoreUrl, {
-                    mode: 'cors',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                addDebug(`Boxscore response status: ${boxscoreResponse.status}`);
-                
-                if (!boxscoreResponse.ok) {
-                    throw new Error(`Boxscore API returned status ${boxscoreResponse.status}`);
-                }
-
-                const boxscoreData = await boxscoreResponse.json();
-                addDebug('Successfully loaded game data');
+                const boxscoreData = await fetchWithProxy(boxscoreUrl);
                 
                 // Display the report
                 await displayGameReport(content, yesterdayGame, boxscoreData);
 
             } catch (error) {
                 console.error('Error:', error);
-                addDebug(`ERROR: ${error.message}`);
                 
                 content.innerHTML = `
                     <div class="error">
                         <strong>⚠️ Unable to fetch Leafs data</strong><br><br>
                         ${error.message}<br><br>
-                        ${error.message.includes('CORS') || error.message.includes('NetworkError') ? 
-                            'This might be a browser security restriction. Try opening the file directly from your device (not through email or cloud storage).' :
-                            'This might be a temporary issue with the NHL API. Please try refreshing in a moment.'
-                        }
+                        The proxy service might be down. Please try refreshing in a moment.
                     </div>
-                    ${DEBUG ? `<div class="debug">${debugInfo.join('<br>')}</div>` : ''}
                 `;
             } finally {
                 isLoading = false;
@@ -476,17 +424,7 @@
         async function displayNoGame(content) {
             try {
                 const standingsUrl = 'https://api-web.nhle.com/v1/standings/now';
-                addDebug(`Fetching standings: ${standingsUrl}`);
-                
-                const standingsResponse = await fetch(standingsUrl, {
-                    mode: 'cors',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                addDebug(`Standings response status: ${standingsResponse.status}`);
-                const standingsData = await standingsResponse.json();
+                const standingsData = await fetchWithProxy(standingsUrl);
                 
                 let leafsStanding = null;
                 for (const team of standingsData.standings || []) {
@@ -503,17 +441,14 @@
                         <div>The Leafs had the night off.</div>
                     </div>
                     ${leafsStanding ? getStandingsHTML(leafsStanding) : ''}
-                    ${DEBUG ? `<div class="debug">${debugInfo.join('<br>')}</div>` : ''}
                 `;
             } catch (e) {
-                addDebug(`Error loading standings: ${e.message}`);
                 content.innerHTML = `
                     <div class="no-game">
                         <div style="font-size: 3rem; margin-bottom: 1rem;">🏒</div>
                         <div style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">No Game Yesterday</div>
                         <div>The Leafs had the night off. Check back after their next game!</div>
                     </div>
-                    ${DEBUG ? `<div class="debug">${debugInfo.join('<br>')}</div>` : ''}
                 `;
             }
         }
@@ -610,8 +545,7 @@
             // Fetch and display standings
             try {
                 const standingsUrl = 'https://api-web.nhle.com/v1/standings/now';
-                const standingsResponse = await fetch(standingsUrl);
-                const standingsData = await standingsResponse.json();
+                const standingsData = await fetchWithProxy(standingsUrl);
                 
                 let leafsStanding = null;
                 for (const team of standingsData.standings || []) {
@@ -625,11 +559,7 @@
                     html += getStandingsHTML(leafsStanding);
                 }
             } catch (e) {
-                addDebug(`Error fetching standings: ${e.message}`);
-            }
-
-            if (DEBUG) {
-                html += `<div class="debug">${debugInfo.join('<br>')}</div>`;
+                console.error('Error fetching standings:', e);
             }
 
             content.innerHTML = html;
