@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leafs Daily Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --leafs-blue: #00205B;
+            --leafs-white: #FFFFFF;
+            --accent-blue: #2E8BC0;
+            --text-gray: #666;
+            --light-bg: #F8F9FA;
+        }
+
+        body {
+            font-family: 'Crimson Pro', serif;
+            background: linear-gradient(135deg, var(--leafs-blue) 0%, #001847 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: var(--leafs-white);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        h1 {
+            font-family: 'Oswald', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .date {
+            font-size: 1rem;
+            opacity: 0.7;
+            margin-top: 0.5rem;
+        }
+
+        .report-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            color: var(--leafs-blue);
+            animation: slideUp 0.8s ease-out;
+            animation-delay: 0.2s;
+            animation-fill-mode: backwards;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            font-size: 1.5rem;
+            color: var(--leafs-blue);
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 32, 91, 0.2);
+            border-top: 4px solid var(--leafs-blue);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 1rem auto;
+        }
+
+        .no-game {
+            text-align: center;
+            padding: 3rem;
+            font-size: 1.3rem;
+        }
+
+        .score-section {
+            text-align: center;
+            padding: 2rem 0;
+            border-bottom: 2px solid var(--light-bg);
+            margin-bottom: 2rem;
+        }
+
+        .game-result {
+            font-family: 'Oswald', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .win {
+            color: #00843D;
+        }
+
+        .loss {
+            color: #C8102E;
+        }
+
+        .ot-loss {
+            color: #FF8C00;
+        }
+
+        .matchup {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .final-score {
+            font-size: 3.5rem;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            margin: 1rem 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .team-logo {
+            width: 60px;
+            height: 60px;
+        }
+
+        .game-info {
+            font-size: 1rem;
+            color: var(--text-gray);
+            margin-top: 0.5rem;
+        }
+
+        .scorers-section {
+            margin: 2rem 0;
+        }
+
+        .section-title {
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+            color: var(--leafs-blue);
+        }
+
+        .scorer {
+            padding: 1rem;
+            background: var(--light-bg);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .scorer:hover {
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .scorer-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .goal-number {
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            min-width: 30px;
+        }
+
+        .scorer-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .goal-details {
+            font-size: 0.95rem;
+            color: var(--text-gray);
+            text-align: right;
+        }
+
+        .assist-details {
+            font-size: 0.85rem;
+            color: var(--text-gray);
+            margin-top: 0.2rem;
+        }
+
+        .standings-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--accent-blue), var(--leafs-blue));
+            border-radius: 8px;
+            color: var(--leafs-white);
+            text-align: center;
+        }
+
+        .standings-header {
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            opacity: 0.95;
+        }
+
+        .record {
+            font-size: 2.5rem;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+            margin: 0.5rem 0;
+        }
+
+        .standings-detail {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin: 0.3rem 0;
+        }
+
+        .refresh-btn {
+            display: block;
+            margin: 2rem auto 0;
+            padding: 1rem 2rem;
+            background: var(--leafs-white);
+            color: var(--leafs-blue);
+            border: none;
+            border-radius: 6px;
+            font-family: 'Oswald', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 1.5rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+            line-height: 1.6;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+            h1 {
+                font-size: 2.5rem;
+            }
+            .report-card {
+                padding: 1.5rem;
+            }
+            .final-score {
+                font-size: 2.5rem;
+            }
+            .team-logo {
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Leafs Daily Report</h1>
+            <div class="subtitle">Your Morning Briefing</div>
+            <div class="date" id="today-date"></div>
+        </header>
+
+        <div id="report-content" class="report-card">
+            <div class="loading">
+                <div class="spinner"></div>
+                <div>Loading Leafs data...</div>
+            </div>
+        </div>
+
+        <button class="refresh-btn" id="refresh-btn" onclick="loadReport()">Refresh Report</button>
+    </div>
+
+    <script>
+        // Set today's date
+        const today = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('today-date').textContent = today.toLocaleDateString('en-US', options);
+
+        let isLoading = false;
+
+        async function loadReport() {
+            if (isLoading) return;
+            
+            const content = document.getElementById('report-content');
+            const refreshBtn = document.getElementById('refresh-btn');
+            
+            isLoading = true;
+            refreshBtn.disabled = true;
+            content.innerHTML = '<div class="loading"><div class="spinner"></div><div>Fetching Leafs data...</div></div>';
+
+            try {
+                // Calculate yesterday's date
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = formatDate(yesterday);
+                
+                // Fetch NHL scoreboard from ESPN for yesterday
+                const scoreboardUrl = `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=${yesterdayStr}`;
+                const scoreboardResponse = await fetch(scoreboardUrl);
+                
+                if (!scoreboardResponse.ok) {
+                    throw new Error(`ESPN API returned status ${scoreboardResponse.status}`);
+                }
+
+                const scoreboardData = await scoreboardResponse.json();
+                
+                // Find the Leafs game
+                const leafsGame = scoreboardData.events?.find(event => {
+                    const teams = event.competitions?.[0]?.competitors || [];
+                    return teams.some(team => 
+                        team.team?.abbreviation === 'TOR' ||
+                        team.team?.displayName?.includes('Maple Leafs')
+                    );
+                });
+
+                if (!leafsGame) {
+                    await displayNoGame(content);
+                    return;
+                }
+
+                // Check if game is complete
+                if (leafsGame.status?.type?.state !== 'post') {
+                    await displayNoGame(content);
+                    return;
+                }
+
+                // Display the game report
+                await displayGameReport(content, leafsGame);
+
+            } catch (error) {
+                console.error('Error:', error);
+                
+                content.innerHTML = `
+                    <div class="error">
+                        <strong>⚠️ Unable to fetch Leafs data</strong><br><br>
+                        ${error.message}<br><br>
+                        Please try refreshing in a moment.
+                    </div>
+                `;
+            } finally {
+                isLoading = false;
+                refreshBtn.disabled = false;
+            }
+        }
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}${month}${day}`;
+        }
+
+        async function displayNoGame(content) {
+            try {
+                // Fetch standings
+                const standingsUrl = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/standings';
+                const standingsResponse = await fetch(standingsUrl);
+                const standingsData = await standingsResponse.json();
+                
+                // Find Leafs in standings
+                let leafsStanding = null;
+                for (const division of standingsData.children || []) {
+                    const team = division.standings?.entries?.find(entry => 
+                        entry.team?.abbreviation === 'TOR'
+                    );
+                    if (team) {
+                        leafsStanding = team;
+                        break;
+                    }
+                }
+
+                content.innerHTML = `
+                    <div class="no-game">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🏒</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">No Game Yesterday</div>
+                        <div>The Leafs had the night off.</div>
+                    </div>
+                    ${leafsStanding ? getStandingsHTML(leafsStanding) : ''}
+                `;
+            } catch (e) {
+                console.error('Error loading standings:', e);
+                content.innerHTML = `
+                    <div class="no-game">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🏒</div>
+                        <div style="font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem;">No Game Yesterday</div>
+                        <div>The Leafs had the night off.</div>
+                    </div>
+                `;
+            }
+        }
+
+        async function displayGameReport(content, gameData) {
+            const competition = gameData.competitions?.[0];
+            const competitors = competition?.competitors || [];
+            
+            // Find Leafs and opponent
+            const leafsTeam = competitors.find(c => c.team?.abbreviation === 'TOR');
+            const opponentTeam = competitors.find(c => c.team?.abbreviation !== 'TOR');
+            
+            if (!leafsTeam || !opponentTeam) {
+                throw new Error('Could not find team data');
+            }
+
+            const leafsScore = parseInt(leafsTeam.score);
+            const opponentScore = parseInt(opponentTeam.score);
+            const isHomeGame = leafsTeam.homeAway === 'home';
+            
+            // Determine result
+            let resultClass = 'win';
+            let resultText = 'LEAFS WIN! 🎉';
+            
+            if (leafsScore < opponentScore) {
+                // Check if OT/SO
+                const periods = competition?.situation?.lastPlay?.period?.number || 3;
+                if (periods > 3) {
+                    resultClass = 'ot-loss';
+                    resultText = 'LEAFS LOSE IN OT/SO';
+                } else {
+                    resultClass = 'loss';
+                    resultText = 'LEAFS LOSE';
+                }
+            }
+            
+            // Build HTML
+            let html = `
+                <div class="score-section">
+                    <div class="game-result ${resultClass}">${resultText}</div>
+                    <div class="matchup">${isHomeGame ? 'vs' : '@'} ${opponentTeam.team.displayName}</div>
+                    <div class="final-score">
+                        <img src="${leafsTeam.team.logo}" alt="Leafs" class="team-logo">
+                        <span>${leafsScore} - ${opponentScore}</span>
+                        <img src="${opponentTeam.team.logo}" alt="${opponentTeam.team.abbreviation}" class="team-logo">
+                    </div>
+                    <div class="game-info">
+                        ${new Date(gameData.date).toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                        })}
+                    </div>
+                </div>
+            `;
+
+            // Get Leafs scorers (if available in linescores)
+            const linescores = leafsTeam.linescores || [];
+            if (linescores.length > 0) {
+                html += `
+                    <div class="scorers-section">
+                        <div class="section-title">📊 Period Breakdown</div>
+                `;
+                
+                linescores.forEach((period, index) => {
+                    if (period.value > 0) {
+                        const periodName = index === 0 ? '1st Period' : 
+                                         index === 1 ? '2nd Period' : 
+                                         index === 2 ? '3rd Period' : 'Overtime';
+                        html += `
+                            <div class="scorer">
+                                <div class="scorer-info">
+                                    <div class="goal-number">${period.value}</div>
+                                    <div class="scorer-name">${periodName}</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+                html += `</div>`;
+            }
+
+            // Fetch and display standings
+            try {
+                const standingsUrl = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/standings';
+                const standingsResponse = await fetch(standingsUrl);
+                const standingsData = await standingsResponse.json();
+                
+                let leafsStanding = null;
+                for (const division of standingsData.children || []) {
+                    const team = division.standings?.entries?.find(entry => 
+                        entry.team?.abbreviation === 'TOR'
+                    );
+                    if (team) {
+                        leafsStanding = team;
+                        break;
+                    }
+                }
+
+                if (leafsStanding) {
+                    html += getStandingsHTML(leafsStanding);
+                }
+            } catch (e) {
+                console.error('Error fetching standings:', e);
+            }
+
+            content.innerHTML = html;
+        }
+
+        function getStandingsHTML(standing) {
+            const stats = standing.stats || [];
+            const record = stats.find(s => s.name === 'overall')?.displayValue || '';
+            const points = stats.find(s => s.name === 'points')?.value || 0;
+            const gamesPlayed = stats.find(s => s.name === 'gamesPlayed')?.value || 0;
+            const rank = stats.find(s => s.name === 'rank')?.value || '?';
+            
+            // Calculate approximate playoff odds based on points pace
+            const pointsPerGame = gamesPlayed > 0 ? points / gamesPlayed : 0;
+            const projectedPoints = Math.round(pointsPerGame * 82);
+            
+            let playoffOdds = '~50%';
+            if (projectedPoints >= 100) playoffOdds = '>95%';
+            else if (projectedPoints >= 95) playoffOdds = '~90%';
+            else if (projectedPoints >= 90) playoffOdds = '~75%';
+            else if (projectedPoints >= 85) playoffOdds = '~60%';
+            else if (projectedPoints < 80) playoffOdds = '<40%';
+
+            return `
+                <div class="standings-section">
+                    <div class="standings-header">CURRENT STANDINGS</div>
+                    <div class="record">${record}</div>
+                    <div class="standings-detail">${points} points (${gamesPlayed} GP)</div>
+                    <div class="standings-detail">${rank}th in ${standing.team?.name || 'Division'}</div>
+                    <div class="standings-detail" style="font-size: 1.2rem; margin-top: 1rem; font-weight: 600;">
+                        Playoff Odds: ${playoffOdds}
+                    </div>
+                    <div class="standings-detail" style="font-size: 0.9rem; opacity: 0.8; margin-top: 0.5rem;">
+                        Based on ~${projectedPoints} point pace
+                    </div>
+                </div>
+            `;
+        }
+
+        // Auto-load on page load
+        window.addEventListener('load', () => {
+            setTimeout(loadReport, 500);
+        });
+    </script>
+</body>
+</html>
